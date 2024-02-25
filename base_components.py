@@ -59,7 +59,7 @@ class Encoder(nn.Module):
         self.mu = nn.Linear(hidden_sizes[-1], n_output)
         self.log_var = nn.Linear(hidden_sizes[-1], n_output)
 
-    def forward(self, x):
+    def forward(self, x, eps=1e-5):
         # ------------------------------WRITE YOUR CODE---------------------------------#
         # generate mu and log_var from x, then sample z from the distribution N(mu, log_var) using rsample() method.
 
@@ -67,7 +67,7 @@ class Encoder(nn.Module):
         mu = self.mu(x)
         log_var = self.log_var(x)
 
-        var = torch.nn.Softplus()(log_var)
+        var = torch.nn.Softplus()(log_var) + eps
 
         latent_dist = torch.distributions.Normal(mu, var.sqrt())
 

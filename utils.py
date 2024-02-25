@@ -1,31 +1,12 @@
 from typing import Callable, Optional
 
 import torch
-import torch.nn.functional as F
-from torch_geometric.nn import GATConv, GATv2Conv, GCNConv, GINConv, TransformerConv
+
+
+__all__ = ["dkl", "_compute_kl_weight"]
+
 
 Distribution = torch.distributions.Distribution
-
-
-def make_layer(
-    in_dim: int,
-    out_dim: int,
-    add_act: bool = True,
-    act: Callable[..., torch.nn.Module] = torch.nn.ReLU,
-    use_norm: bool = True,
-    norm: str = "batch",
-) -> torch.nn.Module:
-    if norm == "batch":
-        norm_l = torch.nn.BatchNorm1d(out_dim)
-    if norm == "layer":
-        norm_l = torch.nn.LayerNorm(out_dim, elementwise_affine=False)
-
-    layers = [torch.nn.Linear(in_dim, out_dim)]
-    if use_norm:
-        layers += [norm_l]
-    if add_act:
-        layers += [act()]
-    return torch.nn.Sequential(*layers)
 
 
 def dkl(q: Distribution):
@@ -39,3 +20,46 @@ def dkl(q: Distribution):
     mu = q.loc
     sigma = q.scale
     return 0.5 * (mu**2 + sigma**2 - 1) - sigma.log()
+
+
+def _compute_kl_weight(
+    epoch: int,
+    n_epochs_kl_warmup: Optional[int],
+    step: Optional[int] = None,
+    n_steps_kl_warmup: Optional[int] = None,
+    max_kl_weight: float = 1.0,
+    min_kl_weight: float = 0.0,
+) -> float:
+    """Computes the kl weight for the current step or epoch.
+    If both `n_epochs_kl_warmup` and `n_steps_kl_warmup` are None `max_kl_weight` is returned.
+
+    Parameters
+    ----------
+    epoch
+        Current epoch.
+    step
+        Current step.
+    n_epochs_kl_warmup
+        Number of training epochs to scale weight on KL divergences from
+        `min_kl_weight` to `max_kl_weight`
+    n_steps_kl_warmup
+        Number of training steps (minibatches) to scale weight on KL divergences from
+        `min_kl_weight` to `max_kl_weight`
+    max_kl_weight
+        Maximum scaling factor on KL divergence during training.
+    min_kl_weight
+        Minimum scaling factor on KL divergence during training.
+    """
+    if min_kl_weight > max_kl_weight:
+        raise ValueError(
+            f"min_kl_weight={min_kl_weight} is larger than max_kl_weight={max_kl_weight}."
+        )
+
+    slope = max_kl_weight - min_kl_weight
+    if n_epochs_kl_warmup:
+        if epoch < n_epochs_kl_warmup:
+            return slope * (epoch / n_epochs_kl_warmup) + min_kl_weight
+    elif n_steps_kl_warmup:
+        if step < n_steps_kl_warmup:
+            return slope * (step / n_steps_kl_warmup) + min_kl_weight
+    return max_kl_weight

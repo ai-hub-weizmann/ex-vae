@@ -7,7 +7,7 @@ from utils import _compute_kl_weight
 __all__ = ["train_epoch", "test_epoch", "train"]
 
 
-def train_epoch(model, optimizer, scheduler, kl_weight, loader, device):
+def train_epoch(model, optimizer, scheduler, kl_weight, loader, device, kl_scale=1.0):
     """Trains over an epoch.
 
     Args:
@@ -24,13 +24,11 @@ def train_epoch(model, optimizer, scheduler, kl_weight, loader, device):
 
     model.train()
 
-    # train_kl, train_recon = [], []
-
     n_cells_train = len(loader.dataset)
 
-    for batch in loader:
+    train_kl_epoch, train_recon_epoch = 0, 0
 
-        train_kl_epoch, train_recon_epoch = 0, 0
+    for batch in loader:
 
         optimizer.zero_grad()
 
@@ -51,12 +49,16 @@ def train_epoch(model, optimizer, scheduler, kl_weight, loader, device):
         # ------------------------------WRITE YOUR CODE---------------------------------#
         # compute the reconstruction part of the ELBO loss here
 
-        recon_loss = -p_x.log_prob(x_input).sum()
+        # recon_loss = -p_x.log_prob(x_input).sum()
+
+        recon_loss = torch.nn.PoissonNLLLoss(log_input=False, reduction="sum")(
+            p_x.mean, x_input
+        )
 
         # ------------------------------WRITE YOUR CODE---------------------------------#
         # compute the ELBO loss here
 
-        loss = kl_weight * kl_loss + recon_loss
+        loss = kl_scale * kl_weight * kl_loss + recon_loss
         loss.backward()
         optimizer.step()
 
@@ -122,6 +124,7 @@ def train_loop(
     n_epochs_kl_warmup=10,
     max_kl_weight=1.0,
     min_kl_weight=0.0,
+    kl_scale=1.0,
 ):
     """Trains a model to minimize some loss function and reports the progress.
 
@@ -149,24 +152,30 @@ def train_loop(
         )
 
         train_kl_epoch, train_recon_epoch = train_epoch(
-            model, optimizer, scheduler, kl_weight, train_loader, device
+            model,
+            optimizer,
+            scheduler,
+            kl_weight,
+            train_loader,
+            device,
+            kl_scale=kl_scale,
         )
-        print(
-            "Train",
-            f"Epoch: {epoch:03d} / {n_epochs:03d}",
-            f"KL Loss: {train_kl_epoch:7.4g}",
-            f"Reconstruction Loss: {train_recon_epoch:7.4g}",
-            sep="   ",
-        )
+        # print(
+        #     "Train",
+        #     f"Epoch: {epoch:03d} / {n_epochs:03d}",
+        #     f"KL Loss: {train_kl_epoch:7.4g}",
+        #     f"Reconstruction Loss: {train_recon_epoch:7.4g}",
+        #     sep="   ",
+        # )
         if epoch % test_every == 0:
             test_kl_epoch, test_recon_epoch = test_epoch(model, test_loader, device)
-            print(
-                "Test",
-                f"Epoch: {epoch:03d} / {n_epochs:03d}",
-                f"KL Loss: {test_kl_epoch:7.4g}",
-                f"Reconstruction Loss: {test_recon_epoch:7.4g}",
-                sep="   ",
-            )
+            # print(
+            #     "Test",
+            #     f"Epoch: {epoch:03d} / {n_epochs:03d}",
+            #     f"KL Loss: {test_kl_epoch:7.4g}",
+            #     f"Reconstruction Loss: {test_recon_epoch:7.4g}",
+            #     sep="   ",
+            # )
 
             train_kl.append(train_kl_epoch)
             train_recon.append(train_recon_epoch)

@@ -7,7 +7,7 @@ from torch import nn
 from base_components import Encoder, BernoulliDecoder, PoissonDecoder
 
 
-__all__ = ["VAE"]
+__all__ = ["VAE", "get_latent_representation"]
 
 
 class VAE(nn.Module):
@@ -66,3 +66,85 @@ class VAE(nn.Module):
         obs_dist = self.decoder(latent_sample)
 
         return obs_dist, latent_dist
+
+
+class VAE_easy(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        latent_dim: int,
+    ):
+        super().__init__()
+
+        # Encoder
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_dim),
+        )
+
+        self.mu = nn.Linear(hidden_dim, latent_dim)
+        self.log_var = nn.Linear(hidden_dim, latent_dim)
+
+        # Decoder
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(hidden_dim, input_dim),
+            nn.Softplus(),  # enforce positivity
+        )
+
+    def forward(self, x):
+
+        x = torch.log(x + 1)
+
+        x = self.encoder(x)
+        mu = self.mu(x)
+        log_var = self.log_var(x)
+
+        var = torch.nn.Softplus()(log_var) + 1e-6
+
+        latent_dist = torch.distributions.Normal(mu, var.sqrt())
+
+        latent_sample = mu + var.sqrt() * torch.randn_like(mu)
+
+        obs_rates = self.decoder(latent_sample)
+
+        obs_dist = torch.distributions.Poisson(obs_rates)
+
+        return obs_dist, latent_dist
+
+
+def get_latent_representation(
+    model: VAE,
+    loader: Optional[Callable] = None,
+    device: Optional[torch.device] = None,
+) -> torch.Tensor:
+    """Get the latent representation of the input data.
+
+    Args:
+      model (VAE): The VAE model.
+      x (torch.Tensor): The input data.
+      n_samples (int): The number of samples to draw from the latent space.
+
+    Returns:
+      torch.Tensor: The latent representation of the input data.
+    """
+
+    model.eval()
+
+    qz_mean = []
+
+    with torch.no_grad():
+        for batch in loader:
+            x_input = batch.layers["counts"].to(device)
+
+            obs_dist, latent_dist = model(x_input)
+
+            qz_mean.append(latent_dist.loc.cpu())
+
+        qz_mean = torch.cat(qz_mean, dim=0)
+
+    return qz_mean.numpy()

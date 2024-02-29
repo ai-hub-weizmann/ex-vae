@@ -4,10 +4,22 @@ from tqdm import tqdm
 
 from utils import _compute_kl_weight
 
+from typing import Optional
+
 __all__ = ["train_epoch", "test_epoch", "train"]
 
 
-def train_epoch(model, optimizer, scheduler, kl_weight, loader, device, kl_scale=1.0):
+def train_epoch(
+    model,
+    optimizer,
+    scheduler,
+    kl_weight,
+    loader,
+    device,
+    kl_scale=1.0,
+    count_layer="counts",
+    batch_obs: Optional[str] = "batch",
+):
     """Trains over an epoch.
 
     Args:
@@ -32,9 +44,12 @@ def train_epoch(model, optimizer, scheduler, kl_weight, loader, device, kl_scale
 
         optimizer.zero_grad()
 
-        x_input = batch.layers["counts"].to(device)
+        x_input = batch.layers[count_layer].to(device)
+        batch_covariate = torch.tensor(batch.obs[batch_obs], dtype=torch.long).to(
+            device
+        )
 
-        p_x, q_z = model(x_input)
+        p_x, q_z = model(x_input, batch_covariate)
 
         # ------------------------------WRITE YOUR CODE---------------------------------#
         # compute the KL part of the ELBO loss here
@@ -74,7 +89,9 @@ def train_epoch(model, optimizer, scheduler, kl_weight, loader, device, kl_scale
     return train_kl_epoch, train_recon_epoch
 
 
-def test_epoch(model, loader, device):
+def test_epoch(
+    model, loader, device, count_layer="counts", batch_obs: Optional[str] = "batch"
+):
 
     model.eval()
 
@@ -85,9 +102,12 @@ def test_epoch(model, loader, device):
     with torch.no_grad():
         for batch in loader:
 
-            x_input = batch.layers["counts"].to(device)
+            x_input = batch.layers[count_layer].to(device)
+            batch_covariate = torch.tensor(batch.obs[batch_obs], dtype=torch.int8).to(
+                device
+            )
 
-            p_x, q_z = model(x_input)
+            p_x, q_z = model(x_input, batch_covariate)
 
             # ------------------------------WRITE YOUR CODE---------------------------------#
             # compute the KL part of the ELBO loss here
@@ -119,7 +139,9 @@ def train_loop(
     train_loader,
     test_loader,
     device,
-    n_epochs,
+    count_layer="counts",
+    batch_obs: Optional[str] = "batch",
+    n_epochs=100,
     test_every=1,
     n_epochs_kl_warmup=10,
     max_kl_weight=1.0,
@@ -159,23 +181,14 @@ def train_loop(
             train_loader,
             device,
             kl_scale=kl_scale,
+            count_layer=count_layer,
+            batch_obs=batch_obs,
         )
-        # print(
-        #     "Train",
-        #     f"Epoch: {epoch:03d} / {n_epochs:03d}",
-        #     f"KL Loss: {train_kl_epoch:7.4g}",
-        #     f"Reconstruction Loss: {train_recon_epoch:7.4g}",
-        #     sep="   ",
-        # )
+
         if epoch % test_every == 0:
-            test_kl_epoch, test_recon_epoch = test_epoch(model, test_loader, device)
-            # print(
-            #     "Test",
-            #     f"Epoch: {epoch:03d} / {n_epochs:03d}",
-            #     f"KL Loss: {test_kl_epoch:7.4g}",
-            #     f"Reconstruction Loss: {test_recon_epoch:7.4g}",
-            #     sep="   ",
-            # )
+            test_kl_epoch, test_recon_epoch = test_epoch(
+                model, test_loader, device, count_layer=count_layer, batch_obs=batch_obs
+            )
 
             train_kl.append(train_kl_epoch)
             train_recon.append(train_recon_epoch)

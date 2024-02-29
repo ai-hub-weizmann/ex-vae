@@ -68,14 +68,20 @@ class VAE(nn.Module):
         return obs_dist, latent_dist
 
 
-class VAE_easy(nn.Module):
+class VAE_batchcorr(nn.Module):
     def __init__(
         self,
         input_dim: int,
         hidden_dim: int,
         latent_dim: int,
+        n_batch: int,
+        concat_batch: bool = False,
     ):
         super().__init__()
+
+        self.n_batch = n_batch
+        self.n_latent = latent_dim
+        self.concat_batch = concat_batch
 
         # Encoder
         self.encoder = nn.Sequential(
@@ -87,16 +93,20 @@ class VAE_easy(nn.Module):
         self.mu = nn.Linear(hidden_dim, latent_dim)
         self.log_var = nn.Linear(hidden_dim, latent_dim)
 
+        self.batch_embedding = nn.Embedding(
+            num_embeddings=self.n_batch, embedding_dim=self.n_latent
+        )
+
         # Decoder
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim),
+            nn.Linear(2 * latent_dim if self.concat_batch else latent_dim, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
             nn.Linear(hidden_dim, input_dim),
             nn.Softplus(),  # enforce positivity
         )
 
-    def forward(self, x):
+    def forward(self, x, batch_covariate: Optional[torch.Tensor] = None):
 
         x = torch.log(x + 1)
 
@@ -110,6 +120,17 @@ class VAE_easy(nn.Module):
 
         latent_sample = mu + var.sqrt() * torch.randn_like(mu)
 
+        if self.concat_batch:
+            # batch_embedding = torch.functional.F.one_hot(
+            #     batch_covariate, num_classes=self.n_batch
+            # ).float()
+
+            # transform batch_covariate to Long tensor:
+            batch_covariate = batch_covariate.long()
+
+            batch_embedding = self.batch_embedding(batch_covariate)
+            latent_sample = torch.cat([latent_sample, batch_embedding], dim=-1)
+
         obs_rates = self.decoder(latent_sample)
 
         obs_dist = torch.distributions.Poisson(obs_rates)
@@ -121,6 +142,7 @@ def get_latent_representation(
     model: VAE,
     loader: Optional[Callable] = None,
     device: Optional[torch.device] = None,
+    count_layer: Optional[str] = "counts",
 ) -> torch.Tensor:
     """Get the latent representation of the input data.
 
@@ -139,11 +161,16 @@ def get_latent_representation(
 
     with torch.no_grad():
         for batch in loader:
-            x_input = batch.layers["counts"].to(device)
+            x_input = batch.layers[count_layer].to(device)
 
-            obs_dist, latent_dist = model(x_input)
+            x = model.encoder(x_input)
+            mu = model.mu(x)
 
-            qz_mean.append(latent_dist.loc.cpu())
+            # obs_dist, latent_dist = model(x_input)
+
+            # qz_mean.append(latent_dist.loc.cpu())
+
+            qz_mean.append(mu.cpu())
 
         qz_mean = torch.cat(qz_mean, dim=0)
 

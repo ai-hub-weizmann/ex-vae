@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 from utils import _compute_kl_weight
 
-from typing import Optional
+from typing import Optional, Tuple
 
 __all__ = ["train_epoch", "test_epoch", "train"]
 
@@ -19,19 +19,41 @@ def train_epoch(
     kl_scale=1.0,
     count_layer="counts",
     batch_obs: Optional[str] = "batch",
-):
-    """Trains over an epoch.
+) -> Tuple[float, float]:
+    """
 
-    Args:
-      model (nn.Module): The model.
-      criterion (callable): The loss function. Should return a scalar tensor.
-      optimizer (optim.Optimizer): The optimizer.
-      loader (torch.utils.data.DataLoader): The test set data loader.
-      device (torch.device): The device to run on.
+    Trains a model for one epoch.
+
+    Params:
+    -------
+
+    model: nn.Module
+        The model.
+    optimizer: optim.Optimizer
+        The optimizer.
+    scheduler: optim.lr_scheduler._LRScheduler
+        The learning rate scheduler.
+    kl_weight: float
+        The weight to apply to the KL divergence term.
+    loader: torch.utils.data.DataLoader
+        The data loader.
+    device: torch.device
+        The device to run on.
+    kl_scale: float
+        The scaling factor for the KL divergence.
+    count_layer: str
+        The name of the count layer in the adata.
+    batch_obs: str
+        The name of the batch observation in the adata.
 
     Returns:
-      acc_metric (Metric): The accuracy metric over the epoch.
-      loss_metric (Metric): The loss metric over the epoch.
+    --------
+
+    float
+        The KL divergence loss.
+    float
+        The reconstruction loss.
+
     """
 
     model.train()
@@ -49,9 +71,12 @@ def train_epoch(
             device
         )
 
+        # BEGIN SOLUTION
+
+        # compute the forward pass here
+
         p_x, q_z = model(x_input, batch_covariate)
 
-        # ------------------------------WRITE YOUR CODE---------------------------------#
         # compute the KL part of the ELBO loss here
 
         # kl_loss = dkl(q_z).sum(axis=1).mean()
@@ -61,7 +86,6 @@ def train_epoch(
             .sum()
         )
 
-        # ------------------------------WRITE YOUR CODE---------------------------------#
         # compute the reconstruction part of the ELBO loss here
 
         # recon_loss = -p_x.log_prob(x_input).sum()
@@ -70,10 +94,11 @@ def train_epoch(
             p_x.mean, x_input
         )
 
-        # ------------------------------WRITE YOUR CODE---------------------------------#
         # compute the ELBO loss here
 
         loss = kl_scale * kl_weight * kl_loss + recon_loss
+
+        # END SOLUTION
         loss.backward()
         optimizer.step()
 
@@ -92,6 +117,31 @@ def train_epoch(
 def test_epoch(
     model, loader, device, count_layer="counts", batch_obs: Optional[str] = "batch"
 ):
+    """
+
+    Tests a model for one epoch.
+
+    Params:
+    -------
+    model: nn.Module
+        The model.
+    loader: torch.utils.data.DataLoader
+        The data loader.
+    device: torch.device
+        The device to run on.
+    count_layer: str
+        The name of the count layer in the batch.
+    batch_obs: str
+        The name of the batch observation in the batch.
+
+    Returns:
+    --------
+    float
+        The KL divergence loss.
+    float
+        The reconstruction loss.
+
+    """
 
     model.eval()
 
@@ -107,9 +157,11 @@ def test_epoch(
                 device
             )
 
+            # BEGIN SOLUTION
+
+            # compute the forward pass here
             p_x, q_z = model(x_input, batch_covariate)
 
-            # ------------------------------WRITE YOUR CODE---------------------------------#
             # compute the KL part of the ELBO loss here
 
             kl_loss = (
@@ -118,10 +170,15 @@ def test_epoch(
                 .sum()
             )
 
-            # ------------------------------WRITE YOUR CODE---------------------------------#
             # compute the reconstruction part of the ELBO loss here
 
-            recon_loss = -p_x.log_prob(x_input).sum()
+            # recon_loss = -p_x.log_prob(x_input).sum()
+
+            recon_loss = torch.nn.PoissonNLLLoss(log_input=False, reduction="sum")(
+                p_x.mean, x_input
+            )
+
+            # END SOLUTION
 
             test_kl += kl_loss.item()
             test_recon += recon_loss.item()
@@ -148,17 +205,52 @@ def train_loop(
     min_kl_weight=0.0,
     kl_scale=1.0,
 ):
-    """Trains a model to minimize some loss function and reports the progress.
+    """
 
-    Args:
-      model (nn.Module): The model.
-      criterion (callable): The loss function. Should return a scalar tensor.
-      optimizer (optim.SGD): The optimizer.
-      train_loader (torch.utils.data.DataLoader): The training set data loader.
-      test_loader (torch.utils.data.DataLoader): The test set data loader.
-      device (torch.device): The device to run on.
-      epochs (int): Number of training epochs.
-      test_every (int): How frequently to report progress on test data.
+    Trains a model for a number of epochs.
+
+    Params:
+    -------
+    model: nn.Module
+        The model.
+    optimizer: optim.Optimizer
+        The optimizer.
+    scheduler: optim.lr_scheduler._LRScheduler
+        The learning rate scheduler.
+    train_loader: torch.utils.data.DataLoader
+        The training data loader.
+    test_loader: torch.utils.data.DataLoader
+        The test data loader.
+    device: torch.device
+        The device to run on.
+    count_layer: str
+        The name of the count layer in the adata
+    batch_obs: str
+        The name of the batch observation in the adata
+    n_epochs: int
+        The number of epochs to train for.
+    test_every: int
+        How often to test the model.
+    n_epochs_kl_warmup: int
+        The number of epochs to scale the KL divergence weight from min to max.
+    max_kl_weight: float
+        The maximum weight to apply to the KL divergence term.
+    min_kl_weight: float
+        The minimum weight to apply to the KL divergence term.
+    kl_scale: float
+        The scaling factor for the KL divergence.
+
+    Returns:
+    --------
+    list
+        The training KL divergence losses.
+    list
+        The training reconstruction losses.
+    list
+        The test KL divergence losses.
+    list
+        The test reconstruction losses.
+
     """
 
     train_kl, train_recon = [], []
@@ -172,6 +264,10 @@ def train_loop(
             max_kl_weight=max_kl_weight,
             min_kl_weight=min_kl_weight,
         )
+
+        # BEGIN SOLUTION
+
+        # train the model for one epoch here
 
         train_kl_epoch, train_recon_epoch = train_epoch(
             model,
@@ -189,6 +285,8 @@ def train_loop(
             test_kl_epoch, test_recon_epoch = test_epoch(
                 model, test_loader, device, count_layer=count_layer, batch_obs=batch_obs
             )
+
+            # END SOLUTION
 
             train_kl.append(train_kl_epoch)
             train_recon.append(train_recon_epoch)

@@ -41,28 +41,54 @@ class VAE(nn.Module):
         hidden_sizes_decoder: list = [128, 256],
         latent_dim: int = 2,
         likelihood: str = "bernoulli",
-        log_variational: bool = False,
+        log_variational: bool = True,
+        n_batch: Optional[int] = None,
+        concat_batch: bool = True,
     ):
         super().__init__()
 
         self.likelihood = likelihood
         self.log_variational = log_variational
+        self.n_batch = n_batch
+        self.n_latent = latent_dim
+        self.concat_batch = concat_batch
 
         self.encoder = Encoder(n_input, latent_dim, hidden_sizes_encoder)
         if likelihood == "bernoulli":
             self.decoder = BernoulliDecoder(latent_dim, n_output, hidden_sizes_decoder)
         elif likelihood == "poisson":
-            self.decoder = PoissonDecoder(latent_dim, n_output, hidden_sizes_decoder)
+            self.decoder = PoissonDecoder(
+                2 * latent_dim if self.concat_batch else latent_dim,
+                n_output,
+                hidden_sizes_decoder,
+            )
 
-    def forward(self, x):
+        self.batch_embedding = nn.Embedding(
+            num_embeddings=self.n_batch, embedding_dim=self.n_latent
+        )
+
+    def forward(self, x, batch_covariate: Optional[torch.Tensor] = None):
         # ------------------------------WRITE YOUR CODE---------------------------------#
         # generate mu and log_var from x, then sample z from the distribution N(mu, log_var) using rsample() method.
         # generate mean from z
 
+        # useful transformation for the input data to make it more Gaussian - so training is easier
         if self.log_variational:
             x = torch.log(x + 1)
 
         latent_dist, latent_sample = self.encoder(x)
+
+        if self.concat_batch:
+            # batch_embedding = torch.functional.F.one_hot(
+            #     batch_covariate, num_classes=self.n_batch
+            # ).float()
+
+            # transform batch_covariate to Long tensor:
+            batch_covariate = batch_covariate.long()
+
+            batch_embedding = self.batch_embedding(batch_covariate)
+            latent_sample = torch.cat([latent_sample, batch_embedding], dim=-1)
+
         obs_dist = self.decoder(latent_sample)
 
         return obs_dist, latent_dist
@@ -163,14 +189,13 @@ def get_latent_representation(
         for batch in loader:
             x_input = batch.layers[count_layer].to(device)
 
-            x = model.encoder(x_input)
-            mu = model.mu(x)
+            # x = model.encoder(x_input)
+            # mu = model.mu(x)
+            # qz_mean.append(mu.cpu())
 
-            # obs_dist, latent_dist = model(x_input)
+            latent_dist, latent_sample = model.encoder(x_input)
 
-            # qz_mean.append(latent_dist.loc.cpu())
-
-            qz_mean.append(mu.cpu())
+            qz_mean.append(latent_dist.loc.cpu())
 
         qz_mean = torch.cat(qz_mean, dim=0)
 

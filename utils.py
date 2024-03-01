@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Optional
 
 import torch
 
@@ -32,6 +32,8 @@ def _compute_kl_weight(
 ) -> float:
     """Computes the kl weight for the current step or epoch.
     If both `n_epochs_kl_warmup` and `n_steps_kl_warmup` are None `max_kl_weight` is returned.
+
+    Code from scvi-tools package.
 
     Parameters
     ----------

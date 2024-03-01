@@ -14,6 +14,29 @@ def make_layer(
     use_norm: bool = True,
     norm: str = "batch",
 ) -> torch.nn.Module:
+    """
+
+    Parameters
+    ----------
+    in_dim : int
+        Number of input features.
+    out_dim : int
+        Number of output features.
+    add_act : bool
+        Whether to add an activation function.
+    act : Callable[..., torch.nn.Module]
+        Activation function.
+    use_norm : bool
+        Whether to use normalization.
+    norm : str
+        Type of normalization. Either "batch" or "layer".
+
+    Returns
+    -------
+    torch.nn.Module
+        A layer.
+    """
+
     if norm == "batch":
         norm_l = torch.nn.BatchNorm1d(out_dim)
     if norm == "layer":
@@ -40,7 +63,8 @@ class Encoder(nn.Module):
     ):
         super().__init__()
 
-        # ------------------------------WRITE YOUR CODE---------------------------------#
+        # BEGIN SOLUTION
+
         # encode a data point. This should return couple of tensors (mu, logvar) representing
         # the mean and the log variance of the Gaussian q(Z | X)
 
@@ -59,8 +83,12 @@ class Encoder(nn.Module):
         self.mu = nn.Linear(hidden_sizes[-1], n_output)
         self.log_var = nn.Linear(hidden_sizes[-1], n_output)
 
+        # END SOLUTION
+
     def forward(self, x, eps=1e-5):
-        # ------------------------------WRITE YOUR CODE---------------------------------#
+
+        # BEGIN SOLUTION
+
         # generate mu and log_var from x, then sample z from the distribution N(mu, log_var) using rsample() method.
 
         x = self.encoder(x)
@@ -74,6 +102,8 @@ class Encoder(nn.Module):
         latent_sample = latent_dist.rsample()
 
         return latent_dist, latent_sample
+
+        # END SOLUTION
 
 
 class BernoulliDecoder(nn.Module):
@@ -134,8 +164,10 @@ class PoissonDecoder(BernoulliDecoder):
         super().__init__(n_input, n_output, hidden_sizes)
 
     def forward(self, z):
-        # ------------------------------WRITE YOUR CODE---------------------------------#
-        # generate mean from z
+
+        # BEGIN SOLUTION
+        # This should return a tensor representing the mean of the
+        # Poisson distribution p(X | Z)
 
         z = self.decoder(z)
 
@@ -144,3 +176,5 @@ class PoissonDecoder(BernoulliDecoder):
         dist = torch.distributions.Poisson(mean)
 
         return dist
+
+        # END SOLUTION

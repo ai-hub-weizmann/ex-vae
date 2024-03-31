@@ -89,7 +89,8 @@ class Encoder(nn.Module):
 
         # BEGIN SOLUTION
 
-        # generate mu and log_var from x, then sample z from the distribution N(mu, log_var) using rsample() method.
+        # generate mu and log_var from x, then sample z from the distribution N(mu, log_var) using either
+        # rsample() method or your own reparametrization trick implementation. Return the distribution and the sample.
 
         x = self.encoder(x)
         mu = self.mu(x)
@@ -106,9 +107,59 @@ class Encoder(nn.Module):
         # END SOLUTION
 
 
+class PoissonDecoder(nn.Module):
+    """
+    Decoder network for the Poisson VAE (count data )
+    """
+
+    def __init__(
+        self,
+        n_input: int,
+        n_output: int,
+        hidden_sizes: list = [128, 256],
+    ):
+        super().__init__()
+
+        # BEGIN SOLUTION
+        # decode a latent variable. This should return a tensor representing the mean of the
+        # Poisson distribution p(X | Z)
+
+        layer_sizes = [n_input, *hidden_sizes]
+
+        self.decoder = torch.nn.Sequential(
+            *[
+                make_layer(
+                    in_dim=in_size,
+                    out_dim=out_size,
+                )
+                for (in_size, out_size) in zip(layer_sizes[:-1], layer_sizes[1:])
+            ]
+        )
+
+        self.mean = nn.Linear(hidden_sizes[-1], n_output)
+
+        # END SOLUTION
+
+    def forward(self, z):
+
+        # BEGIN SOLUTION
+        # This should return a tensor representing the mean (=rate) of the
+        # Poisson distribution p(X | Z)
+
+        z = self.decoder(z)
+
+        mean = torch.nn.Softplus()(self.mean(z))
+
+        dist = torch.distributions.Poisson(mean)
+
+        return dist
+
+        # END SOLUTION
+
+
 class BernoulliDecoder(nn.Module):
     """
-    Decoder network for the VAE.
+    Decoder network for the Bernoulli VAE (binary data)
     """
 
     def __init__(
@@ -148,33 +199,3 @@ class BernoulliDecoder(nn.Module):
         dist = torch.distributions.Bernoulli(mean)
 
         return dist
-
-
-class PoissonDecoder(BernoulliDecoder):
-    """
-    Decoder network for the Poisson VAE.
-    """
-
-    def __init__(
-        self,
-        n_input: int,
-        n_output: int,
-        hidden_sizes: list = [128, 256],
-    ):
-        super().__init__(n_input, n_output, hidden_sizes)
-
-    def forward(self, z):
-
-        # BEGIN SOLUTION
-        # This should return a tensor representing the mean of the
-        # Poisson distribution p(X | Z)
-
-        z = self.decoder(z)
-
-        mean = torch.nn.Softplus()(self.mean(z))
-
-        dist = torch.distributions.Poisson(mean)
-
-        return dist
-
-        # END SOLUTION

@@ -74,7 +74,7 @@ class VAE(nn.Module):
 
         # useful transformation for the input data to make it more Gaussian - so training is easier
         if self.log_variational:
-            x = torch.log(x + 1)
+            x = torch.log1p(x)
 
         latent_dist, latent_sample = self.encoder(x)
 

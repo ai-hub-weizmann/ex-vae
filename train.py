@@ -16,7 +16,6 @@ def train_epoch(
     kl_weight,
     loader,
     device,
-    kl_scale=1.0,
     count_layer="counts",
     batch_obs: Optional[str] = "batch",
 ) -> Tuple[float, float]:
@@ -39,8 +38,6 @@ def train_epoch(
         The data loader.
     device: torch.device
         The device to run on.
-    kl_scale: float
-        The scaling factor for the KL divergence.
     count_layer: str
         The name of the count layer in the adata.
     batch_obs: str
@@ -67,6 +64,8 @@ def train_epoch(
         optimizer.zero_grad()
 
         x_input = batch.layers[count_layer].to(device)
+
+        # Optional if you implement batch correction in the model
         batch_covariate = torch.tensor(batch.obs[batch_obs], dtype=torch.long).to(
             device
         )
@@ -75,35 +74,27 @@ def train_epoch(
 
         # compute the forward pass here
 
-        p_x, q_z = model(x_input, batch_covariate)
+        # p_x, q_z =
 
         # compute the KL part of the ELBO loss here
 
-        # kl_loss = dkl(q_z).sum(axis=1).mean()
-        kl_loss = (
-            torch.distributions.kl_divergence(q_z, torch.distributions.Normal(0, 1))
-            .sum(axis=1)
-            .sum()
-        )
+        # kl_loss =
 
         # compute the reconstruction part of the ELBO loss here
 
-        # recon_loss = -p_x.log_prob(x_input).sum()
-
-        recon_loss = torch.nn.PoissonNLLLoss(log_input=False, reduction="sum")(
-            p_x.mean, x_input
-        )
+        # recon_loss =
 
         # compute the ELBO loss here
 
-        loss = kl_scale * kl_weight * kl_loss + recon_loss
+        # loss = kl_weight * kl_loss + recon_loss
+
+        # loss.backward()
+        # optimizer.step()
+
+        # train_kl_epoch += kl_loss.item()
+        # train_recon_epoch += recon_loss.item()
 
         # END SOLUTION
-        loss.backward()
-        optimizer.step()
-
-        train_kl_epoch += kl_loss.item()
-        train_recon_epoch += recon_loss.item()
 
     train_kl_epoch = train_kl_epoch / n_cells_train
     train_recon_epoch = train_recon_epoch / n_cells_train
@@ -160,28 +151,20 @@ def test_epoch(
             # BEGIN SOLUTION
 
             # compute the forward pass here
-            p_x, q_z = model(x_input, batch_covariate)
+            # p_x, q_z =
 
             # compute the KL part of the ELBO loss here
 
-            kl_loss = (
-                torch.distributions.kl_divergence(q_z, torch.distributions.Normal(0, 1))
-                .sum(axis=1)
-                .sum()
-            )
+            # kl_loss =
 
             # compute the reconstruction part of the ELBO loss here
 
-            # recon_loss = -p_x.log_prob(x_input).sum()
+            # recon_loss =
 
-            recon_loss = torch.nn.PoissonNLLLoss(log_input=False, reduction="sum")(
-                p_x.mean, x_input
-            )
+            # test_kl += kl_loss.item()
+            # test_recon += recon_loss.item()
 
             # END SOLUTION
-
-            test_kl += kl_loss.item()
-            test_recon += recon_loss.item()
 
     test_kl = test_kl / n_cells_test
     test_recon = test_recon / n_cells_test
@@ -265,8 +248,6 @@ def train_loop(
             min_kl_weight=min_kl_weight,
         )
 
-        # BEGIN SOLUTION
-
         # train the model for one epoch here
 
         train_kl_epoch, train_recon_epoch = train_epoch(
@@ -285,8 +266,6 @@ def train_loop(
             test_kl_epoch, test_recon_epoch = test_epoch(
                 model, test_loader, device, count_layer=count_layer, batch_obs=batch_obs
             )
-
-            # END SOLUTION
 
             train_kl.append(train_kl_epoch)
             train_recon.append(train_recon_epoch)

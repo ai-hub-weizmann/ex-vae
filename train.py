@@ -80,7 +80,7 @@ def train_epoch(
 
         # kl_loss =
 
-        # compute the reconstruction part of the ELBO loss here
+        # compute the reconstruction part of the ELBO loss here (you can use the Pytorch PoissonNLLLoss here, or implement it yourself)
 
         # recon_loss =
 

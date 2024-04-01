@@ -4,7 +4,7 @@ import torch
 
 from torch import nn
 
-from base_components import Encoder, BernoulliDecoder, PoissonDecoder
+from base_components import Encoder, PoissonDecoder
 
 
 __all__ = ["VAE", "get_latent_representation"]
@@ -55,7 +55,7 @@ class VAE(nn.Module):
 
         self.encoder = Encoder(n_input, latent_dim, hidden_sizes_encoder)
         if likelihood == "bernoulli":
-            self.decoder = BernoulliDecoder(latent_dim, n_output, hidden_sizes_decoder)
+            raise NotImplementedError
         elif likelihood == "poisson":
             self.decoder = PoissonDecoder(
                 2 * latent_dim if self.concat_batch else latent_dim,

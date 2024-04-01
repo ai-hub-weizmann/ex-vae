@@ -3,7 +3,7 @@ from torch import nn
 
 from typing import Callable, Optional
 
-_all__ = ["Encoder", "BernoulliDecoder", "PoissonDecoder"]
+_all__ = ["Encoder", "PoissonDecoder"]
 
 
 def make_layer(
@@ -48,6 +48,89 @@ def make_layer(
     if add_act:
         layers += [act()]
     return torch.nn.Sequential(*layers)
+
+
+# class Encoder(nn.Module):
+#     """
+#     Encoder network for the VAE.
+#     """
+
+#     def __init__(
+#         self,
+#         n_input: int,
+#         n_output: int,
+#         hidden_sizes: list = [256, 128],
+#     ):
+#         super().__init__()
+
+#         # BEGIN SOLUTION
+
+#         # encode a data point. This should return couple of tensors (mu, logvar) representing
+#         # the mean and the log variance of the Gaussian q(Z | X)
+
+#         # layer_sizes = [n_input, *hidden_sizes]
+
+#         # self.encoder =
+
+#         # self.mu =
+#         # self.log_var =
+
+#         raise NotImplementedError
+
+#         # END SOLUTION
+
+#     def forward(self, x, eps=1e-5):
+
+#         # BEGIN SOLUTION
+
+#         # generate mu and log_var from x, then sample z from the distribution N(mu, log_var) using either
+#         # rsample() method or your own reparametrization trick implementation. Return the distribution and the sample.
+
+#         raise NotImplementedError
+
+#         # END SOLUTION
+
+
+# class PoissonDecoder(nn.Module):
+#     """
+#     Decoder network for the Poisson VAE (count data )
+#     """
+
+#     def __init__(
+#         self,
+#         n_input: int,
+#         n_output: int,
+#         hidden_sizes: list = [128, 256],
+#     ):
+#         super().__init__()
+
+#         # BEGIN SOLUTION
+#         # decode a latent variable. This should return a tensor representing the mean of the
+#         # Poisson distribution p(X | Z)
+
+#         # layer_sizes = [n_input, *hidden_sizes]
+
+#         # self.decoder =
+#         # self.mean =
+
+#         raise NotImplementedError
+#         # END SOLUTION
+
+#     def forward(self, z):
+
+#         # BEGIN SOLUTION
+#         # This should return a tensor representing the mean (=rate) of the
+#         # Poisson distribution p(X | Z)
+
+#         z = self.decoder(z)
+
+#         mean = torch.nn.Softplus()(self.mean(z))
+
+#         dist = torch.distributions.Poisson(mean)
+
+#         return dist
+
+#         # END SOLUTION
 
 
 class Encoder(nn.Module):
@@ -155,47 +238,3 @@ class PoissonDecoder(nn.Module):
         return dist
 
         # END SOLUTION
-
-
-class BernoulliDecoder(nn.Module):
-    """
-    Decoder network for the Bernoulli VAE (binary data)
-    """
-
-    def __init__(
-        self,
-        n_input: int,
-        n_output: int,
-        hidden_sizes: list = [128, 256],
-    ):
-        super().__init__()
-
-        layer_sizes = [n_input, *hidden_sizes]
-
-        # ------------------------------WRITE YOUR CODE---------------------------------#
-        # decode a latent variable. This should return a tensor representing the mean of the
-        # Bernoulli distribution p(X | Z)
-
-        self.decoder = torch.nn.Sequential(
-            *[
-                make_layer(
-                    in_dim=in_size,
-                    out_dim=out_size,
-                )
-                for (in_size, out_size) in zip(layer_sizes[:-1], layer_sizes[1:])
-            ]
-        )
-
-        self.mean = nn.Linear(hidden_sizes[-1], n_output)
-
-    def forward(self, z):
-        # ------------------------------WRITE YOUR CODE---------------------------------#
-        # generate mean from z
-
-        z = self.decoder(z)
-
-        mean = torch.sigmoid(self.mean(z))
-
-        dist = torch.distributions.Bernoulli(mean)
-
-        return dist
